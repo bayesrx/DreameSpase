@@ -1,0 +1,217 @@
+---
+title: "DreameSpase-fitting"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{DreameSpase-fitting}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(DreameSpase)
+library(tidyverse)
+library(magrittr)
+```
+
+# Introduction
+
+This vignette demonstrates how to simulate data from the *DreameSpase* model
+and then fit the model on the resulting data. 
+
+# Simulating Data
+
+In order to simulate a full data set from the *DreameSpase* model, we can
+use the `SimulateDataSet` function. This simulates data on rectangular lattices
+with a common number of rows and columns across all lattices. The arguments
+are described in the comments next to them.
+
+```{r}
+set.seed(123456789)
+
+simulated_data = SimulateDataSet(N = 50, # Number of regions/biopsies
+                m = 7, # Number of rows in each lattice
+                n = 7, # Number of columns in each lattice
+                X_mu = rep(0, 10), # Covariate mean vector
+                X_sigma = diag(10), # Covariate covariance matrix
+                alpha = c(1, rep(0, 9)), # main effect vector
+                tau_2 = 0.3, # Global CAR process variance
+                rho = 0.9, # Global CAR process correlation
+                psi_2 = c(0, 1, rep(0, 8)), # Random effect variances
+                phi = 0.3, # Random effect correlations
+                nu_2 = 0.3) # Pure error variance
+```
+
+Thus, in this simulated data set, there is one true main effect (the first one)
+and one true random effect (the second one). All other effects are equal to zero.
+
+# Preparing data for model fitting
+
+There are three main things we need to fit the model: the outcomes, the 
+covariates, and the adjacency matrices. 
+
+**Format of Outcomes:** The outcomes should be passed
+as a list of vectors, where each entry in the list represents a region, and each
+entry in the vector represents the outcome for a sub-region. 
+
+**Format of Covariates:** The covariates 
+should be a matrix with the number of rows equal to the number of regions,
+and the number of columns equal to the number of covariates. Thus, below we have
+`length(Y) = nrow(X)`. 
+
+**Format of Adjacency Matrices:** Finally, the adjacency matrices should be 
+passed as a list of matrices. The $i$th entry in this list should be the 
+adjaency matrixfor the $i$th region. For a given adjacency matrix, if sub-
+regions $j$ and $k$ are adjacent $(j \neq k)$, entry $j,k$ and $k, j$ should be 
+1 in the adjacency matrix; otherwise, it should be zero. Thus, below we have
+`nrow(W[[i]]) = ncol(W[[i]]) = length(Y[[i]])`.
+
+```{r}
+Y = map(simulated_data, ~ as.numeric(.x$Y))
+X = map(simulated_data, ~ .x$X) %>% 
+  do.call(rbind, .)
+W = map(simulated_data, ~ .x$W)
+```
+
+# Model Fitting Settings
+
+There are a number of settings that can be tweaked in the actual model fitting.
+While many are best left alone, there are some that are worth discussing and
+understanding.
+
+* `update_spike_every`: the random effect variance terms, 
+$\psi_1^2, \dots, \psi_p^2$, are computationally intensive to sample. Thus, it
+is most computationally efficient to sample the unselected terms every $k > 1$
+samples. Here we sample the unselected variance parameters every 10 samples.
+
+* `warm_start`: initializes the main and random effects to reasonable values. 
+This generally helps convergence, and I recommend always setting this to true.
+
+* `seed`: this is the seed for the model fitting. This allows you to reproduce
+the same model fitting multiple times. 
+
+* `sigma_2_alpha_spike`/`sigma_2_alpha_slab`: respectively, the variance of the 
+spike and slab priors for the main effects. The value of the slab variance 
+should be fairly large; there's no hard rule for the spike variance, but I 
+generally set it to be at least three to six times smaller than the magnitude 
+of the smallest main effect I want to detect. However, this depends on if 
+you're more worried about false negatives or false positives. In general, larger
+values will lead the model to be more conservative in its selection, and smaller 
+values will lead it to be less conservative.
+
+* `psi_2_j_spike`/`psi_2_j_slab`: respectively, the variance of the 
+spike and slab priors for the *random* effects. Note that these priors are 
+technically *half*-spike and *half*-slab priors, so while the same rule of thumb
+as above generally holds reasonably well, they may require slightly different
+tuning than their main effect counterparts.
+
+* `grid_prior_values`: this determines the grid of values for the grid prior of
+the global CAR process parameter, $\rho$. This is essentially a nuisance
+parameter, and while it is important to choose a reasonable range of values
+for the grid, choosing too dense a set will result in a drastic increase in
+computational time to fit the model.
+
+* `progress_every`: the model prints updates on how many samples it has taken
+over the course of model fitting. This settings specifies how often it should
+print these updates,
+
+```{r}
+fit_settings = list(
+  update_spike_every = 10,
+  warm_start = TRUE,
+  seed = 987654321,
+  sigma_2_alpha_spike = 0.1,
+  sigma_2_alpha_slab = 100,
+  psi_2_j_spike = 0.1,
+  psi_2_j_slab = 100,
+  grid_prior_values = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
+  progress_every = 5000
+)
+```
+
+# Fitting Model
+
+```{r}
+DS_fit = DreameSpase(data_list = Y, 
+            X = X, 
+            W = W, 
+            n_burnin = 2000,
+            n_samples = 8000,
+            settings = fit_settings)
+```
+
+# Checking Results
+
+Convergence can be checked using standard usual methods. For example, global convergence test can be performed on the log-likelihood samples as follows. Note that this code is not executed to avoid dependence on an additional package (`coda`). 
+
+```{r eval=FALSE}
+library(coda)
+
+DS_fit$samples$loglik %>% 
+  coda::as.mcmc() %>% 
+  coda::geweke.diag()
+```
+
+Once we have determined that the model has converged, we can check the posterior
+probabilities of selection for each of the main effects as follows:
+
+```{r}
+DS_fit$samples$gamma %>% rowMeans()
+```
+
+And analogously for the random effects:
+
+```{r}
+DS_fit$samples$d %>% rowMeans()
+```
+
+Note that the model has selected the true main effect and the true random 
+effect. As for the posterior means, we can get them like so:
+
+```{r}
+DS_fit$samples$alpha %>% rowMeans()
+```
+
+Likewise for the random effects:
+
+```{r}
+DS_fit$samples$psi %>% rowMeans()
+```
+
+Thus, we see that not only were the selections correct, but the estimates 
+themselves are also quite close to the true values. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
