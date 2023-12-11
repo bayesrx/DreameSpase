@@ -2,7 +2,7 @@
 
 A package for fitting the model in the forthcoming paper, *Dual Random Effect and Main Effect Spatial Selection for Pathology Imaging and Genomics Data*. You can install the current version of *DreameSpase* using `devtools` as follows:
 
-```
+``` r
 # install.packages("devtools")
 devtools::install_github("nateosher/DIMPLE")
 ```
