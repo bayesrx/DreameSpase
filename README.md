@@ -4,14 +4,14 @@ A package for fitting the model in the forthcoming paper, *Dual Random Effect an
 
 ``` r
 # install.packages("devtools")
-devtools::install_github("nateosher/DreameSpase")
+devtools::install_github("bayesrx/DreameSpase")
 ```
 
 To install with vignettes (which I recommend), use the command:
 
 ``` r
 # install.packages("devtools")
-devtools::install_github("nateosher/DreameSpase", build_vignettes = TRUE)
+devtools::install_github("bayesrx/DreameSpase", build_vignettes = TRUE)
 ```
 
 This will take a few minutes, since the code in the vignette (which involves fitting a small version of the model) has to run.
