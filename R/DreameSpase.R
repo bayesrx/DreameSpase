@@ -34,7 +34,7 @@ DreameSpase = function(data_list, X, W, n_samples, n_burnin, thinning = 1,
   spike_optim = setd(s$spike_optim, TRUE)
   sample_delta = setd(s$sample_delta, TRUE)
   sample_gamma = setd(s$sample_gamma, TRUE)
-  sample_d = setd(s$sample_d, TRUE)
+  sample_d_ind = setd(s$sample_d_ind, TRUE)
 
   #############
   # Data
@@ -182,7 +182,7 @@ DreameSpase = function(data_list, X, W, n_samples, n_burnin, thinning = 1,
     update_spike_every = update_spike_every,
     sample_delta = sample_delta,
     sample_gamma = sample_gamma,
-    sample_d = sample_d,
+    sample_d = sample_d_ind,
     nu_2_init = nu_2_init, # Initial Values
     alpha_init = alpha_init,
     delta_init = delta_init,
